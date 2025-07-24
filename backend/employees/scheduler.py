@@ -1,6 +1,6 @@
 from datetime import datetime, time
 from employees.models.employees import Schedule
-from backend.configs.db import db
+from configs.db import db
 
 def is_on_shift(employee_id):
     now = datetime.now()
