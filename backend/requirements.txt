@@ -1,0 +1,8 @@
+Flask
+flask-cors
+flask-sqlalchemy
+gunicorn
+gTTS
+SpeechRecognition
+Werkzeug
+PyJWT
