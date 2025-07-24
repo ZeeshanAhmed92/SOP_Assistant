@@ -6,3 +6,4 @@ gTTS
 SpeechRecognition
 Werkzeug
 PyJWT
+psycopg2-binary

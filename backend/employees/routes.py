@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from employees.models.employees import Employee
-from employees.models.schedule import Schedule
+from employees.models.employees import Schedule
 from configs.db import db
 from datetime import datetime
 

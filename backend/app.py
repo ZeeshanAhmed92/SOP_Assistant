@@ -1,5 +1,6 @@
 from flask import Flask
 from flask_cors import CORS
+from configs.db import init_db # 👈 import init_db
 from auth.routes import auth_bp
 from employees.routes import emp_bp
 from sop.upload import sop_upload_bp
@@ -10,9 +11,11 @@ from logs.routes import log_bp
 
 def create_app():
     app = Flask(__name__)
+    app.config.from_pyfile("./configs/configurations.py")  # or use environment variables
     CORS(app)
 
-    # Register Blueprints
+    init_db(app)  # 👈 initialize DB with app context
+
     app.register_blueprint(auth_bp, url_prefix='/auth')
     app.register_blueprint(emp_bp, url_prefix='/employee')
     app.register_blueprint(sop_upload_bp, url_prefix='/sop')
