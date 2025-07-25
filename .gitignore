@@ -1,6 +1,9 @@
 .python-version
-__pycache__
+__pycache__/
 .env
+
+uploads/
+
 # node modules
 node_modules/
 

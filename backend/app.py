@@ -8,6 +8,9 @@ from sop.query import sop_query_bp
 from audio.stt import stt_bp
 from audio.tts import tts_bp
 from logs.routes import log_bp
+from dotenv import load_dotenv
+
+load_dotenv()
 
 def create_app():
     app = Flask(__name__)

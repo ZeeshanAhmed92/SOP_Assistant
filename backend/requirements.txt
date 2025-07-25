@@ -7,3 +7,15 @@ SpeechRecognition
 Werkzeug
 PyJWT
 psycopg2-binary
+faiss-cpu
+groq
+langchain
+unstructured
+sentence-transformers
+langchain-community
+langchain-groq
+langchain-huggingface
+openai 
+langchain-openai 
+pdfminer
+pymupdf
