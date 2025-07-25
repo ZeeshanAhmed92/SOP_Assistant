@@ -8,6 +8,7 @@ from langchain_community.vectorstores import FAISS
 from langchain_groq import ChatGroq
 from langchain.chains import RetrievalQA
 from langchain_openai import OpenAIEmbeddings
+from langchain_ollama import OllamaEmbeddings
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -35,11 +36,10 @@ VECTOR_STORE_PATH = "faiss_store"
 METADATA_PATH = os.path.join(VECTOR_STORE_PATH, "doc_metadata.pkl")
 
 # Embedding model
-embedding_model = OpenAIEmbeddings(
-    model="text-embedding-3-large",
-    api_key=os.getenv('OPENAI_API_KEY')
+embedding_model = OllamaEmbeddings(
+    model="nomic-embed-text:v1.5",       # or "mxbai-embed-large", etc.
+    base_url="http://localhost:11434"           # optional, requires tqdm
 )
-
 # Metadata store
 def load_metadata():
     if os.path.exists(METADATA_PATH):

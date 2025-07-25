@@ -19,3 +19,4 @@ openai
 langchain-openai 
 pdfminer
 pymupdf
+langchain-ollama 
