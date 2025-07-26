@@ -1,22 +1,28 @@
 import os
 import uuid
+import hashlib
 import pickle
+import traceback
 from langchain_community.document_loaders import UnstructuredPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import PyMuPDFLoader
 from langchain_community.vectorstores import FAISS
-from langchain_groq import ChatGroq
 from langchain.chains import RetrievalQA
-from langchain_openai import OpenAIEmbeddings
-from langchain_ollama import OllamaEmbeddings
+from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from dotenv import load_dotenv
+from langchain_community.document_loaders import (PyMuPDFLoader, Docx2txtLoader, TextLoader)
+
 load_dotenv()
 
+# Constants
+VECTOR_STORE_PATH = "faiss_store"
+INDEX_FILE = os.path.join(VECTOR_STORE_PATH, "index.faiss")
+METADATA_PATH = os.path.join(VECTOR_STORE_PATH, "doc_metadata.pkl")
 
-from langchain_community.document_loaders import (
-    PyMuPDFLoader,           # PDF
-    Docx2txtLoader,          # DOCX
-    TextLoader               # TXT
+# Embedding model
+embedding_model = OpenAIEmbeddings(
+    model="text-embedding-3-small",
+    openai_api_key=os.getenv("OPENAI_API_KEY")
 )
 
 def get_loader(file_path):
@@ -30,17 +36,7 @@ def get_loader(file_path):
     else:
         raise ValueError(f"❌ Unsupported file type: {ext}")
 
-
-# Constants
-VECTOR_STORE_PATH = "faiss_store"
-METADATA_PATH = os.path.join(VECTOR_STORE_PATH, "doc_metadata.pkl")
-
-# Embedding model
-embedding_model = OllamaEmbeddings(
-    model="nomic-embed-text:v1.5",       # or "mxbai-embed-large", etc.
-    base_url="http://localhost:11434"           # optional, requires tqdm
-)
-# Metadata store
+# Metadata store (for filenames & hashes)
 def load_metadata():
     if os.path.exists(METADATA_PATH):
         with open(METADATA_PATH, "rb") as f:
@@ -51,16 +47,21 @@ def save_metadata(metadata):
     with open(METADATA_PATH, "wb") as f:
         pickle.dump(metadata, f)
 
+# File hashing function
+def compute_file_hash(file_path):
+    hash_func = hashlib.sha256()
+    with open(file_path, "rb") as f:
+        while chunk := f.read(8192):
+            hash_func.update(chunk)
+    return hash_func.hexdigest()
 
-
-# Add new PDF to vector store
+# Main processor
 def process_document(file_path):
-    print("processing doc")
     try:
         loader = get_loader(file_path)
     except ValueError as e:
         return str(e)
-    print("about to load doc")
+
     try:
         print(f"📄 Loading document: {file_path}")
         documents = loader.load()
@@ -69,16 +70,23 @@ def process_document(file_path):
         import traceback
         traceback.print_exc()
         return f"❌ Error loading document: {e}"
+
+    file_hash = compute_file_hash(file_path)
+    metadata = load_metadata()
+
+    # 🚫 Skip if hash already exists
+    if file_hash in metadata.values():
+        return f"⚠️ File already exists in vector store. Skipping: {os.path.basename(file_path)}"
+
     doc_id = str(uuid.uuid4())
-    print("set id doc")
     for doc in documents:
         doc.metadata["doc_id"] = doc_id
         doc.metadata["source"] = os.path.basename(file_path)
 
     splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
     chunks = splitter.split_documents(documents)
-    print("chunked doc")
-    if os.path.exists(VECTOR_STORE_PATH):
+
+    if os.path.exists(INDEX_FILE):
         db = FAISS.load_local(VECTOR_STORE_PATH, embedding_model, allow_dangerous_deserialization=True)
         db.add_documents(chunks)
     else:
@@ -86,11 +94,11 @@ def process_document(file_path):
 
     db.save_local(VECTOR_STORE_PATH)
 
-    metadata = load_metadata()
-    metadata[doc_id] = os.path.basename(file_path)
+    metadata[doc_id] = file_hash
     save_metadata(metadata)
 
     return f"✅ Added '{file_path}' to vector store."
+
 
 # Delete PDF from vector store
 def delete_document(file_name):
@@ -122,14 +130,33 @@ def delete_document(file_name):
 
 # Query
 def query_index(question):
-    if not os.path.exists(VECTOR_STORE_PATH):
-        return "⚠️ No vector index found. Please add documents first."
+    try:
+        print(f"[DEBUG] Checking vector store path: {VECTOR_STORE_PATH}")
+        if not os.path.exists(VECTOR_STORE_PATH):
+            raise FileNotFoundError("⚠️ No vector index found. Please add documents first.")
 
-    db = FAISS.load_local(VECTOR_STORE_PATH, embedding_model, allow_dangerous_deserialization=True)
-    retriever = db.as_retriever()
+        print("[DEBUG] Loading FAISS vector store...")
+        db = FAISS.load_local(VECTOR_STORE_PATH, embedding_model, allow_dangerous_deserialization=True)
 
-    llm = ChatGroq(groq_api_key=os.getenv("GROQ_API_KEY"), model_name="llama3-8b-8192")
-    chain = RetrievalQA.from_chain_type(llm=llm, retriever=retriever, return_source_documents=True)
+        print("[DEBUG] Getting retriever...")
+        retriever = db.as_retriever()
 
-    result = chain.invoke({"query": question})
-    return result["result"]
+        print("[DEBUG] Initializing OpenAI Chat model...")
+        llm = ChatOpenAI(
+            model="gpt-4.1-mini",
+            openai_api_key=os.getenv("OPENAI_API_KEY"),
+            temperature=0.5
+        )
+
+        print("[DEBUG] Creating RetrievalQA chain...")
+        chain = RetrievalQA.from_chain_type(llm=llm, retriever=retriever, return_source_documents=True)
+
+        print("[DEBUG] Invoking chain...")
+        result = chain.invoke({"query": question})
+        return result["result"]
+
+    except Exception as e:
+        print("[ERROR] Exception in query_index()")
+        traceback.print_exc()
+        raise e
+
